@@ -1,4 +1,4 @@
-from check_proxies import Crawler
+from Proxy_Pool import Crawler
 from pymongo import MongoClient
 
 proxy_websites = [
