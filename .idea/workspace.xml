@@ -6,8 +6,8 @@
   <component name="ChangeListManager">
     <list default="true" id="347067a2-6c1a-4f62-a1ea-6a614add074d" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Proxy_Pool.py" beforeDir="false" afterPath="$PROJECT_DIR$/Proxy_Pool.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/main.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/proxies.json" beforeDir="false" afterPath="$PROJECT_DIR$/proxies.json" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -67,7 +67,7 @@
       <option name="presentableId" value="Default" />
       <updated>1723979341212</updated>
       <workItem from="1723979342481" duration="2402000" />
-      <workItem from="1724041801550" duration="10956000" />
+      <workItem from="1724041801550" duration="14038000" />
     </task>
     <servers />
   </component>
@@ -86,6 +86,6 @@
     </option>
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
-    <SUITE FILE_PATH="coverage/Proxy_Pool$main.coverage" NAME="main Coverage Results" MODIFIED="1724051566319" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
+    <SUITE FILE_PATH="coverage/Proxy_Pool$main.coverage" NAME="main Coverage Results" MODIFIED="1724054607098" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
   </component>
 </project>

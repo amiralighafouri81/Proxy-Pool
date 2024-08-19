@@ -22,9 +22,6 @@ proxy_websites = [
 # Thread-safe Queue for proxy validation
 q = queue.Queue()
 
-# List to store valid proxies
-valid_proxies = []
-
 # Number of threads for validation
 NUM_THREADS = 10
 
@@ -39,39 +36,44 @@ def validate_proxy(proxy):
     return False
 
 # Worker function to validate proxies from the queue
-def check_proxies():
-    global q, valid_proxies
+def check_proxies(client, db):
+    collection = db[COLLECTION_NAME]
     while True:
         proxy = q.get()
         if proxy is None:  # Exit signal
             break
         if validate_proxy(proxy):
             print(f"Valid proxy found: {proxy}")
-            valid_proxies.append(proxy)
+            collection.update_one(
+                {"proxy": proxy},
+                {"$set": {"proxy": proxy, "valid": True}},
+                upsert=True
+            )
+            print(f"{proxy} added to db")
+        else:
+            collection.delete_one({"proxy": proxy})
+            print(f"Removed invalid proxy: {proxy}")
         q.task_done()
 
 # Function to continuously crawl, validate, and update the MongoDB database
 def update_proxies_in_db():
     client = MongoClient(MONGO_URI)
     db = client[DATABASE_NAME]
-    collection = db[COLLECTION_NAME]
 
     while True:
         # Step 1: Crawl for new proxies
         crawler = Crawler(urls=proxy_websites)
         data = crawler.run()
 
-        # Step 2: Validate crawled proxies
-        new_proxies = []
+        # Step 2: Add new proxies to the queue
         for page_data in data:
             for proxy in page_data["proxies"]:
                 q.put(proxy)
-                new_proxies.append(proxy)
 
         # Start threads for validation
         threads = []
         for _ in range(NUM_THREADS):
-            t = threading.Thread(target=check_proxies)
+            t = threading.Thread(target=check_proxies, args=(client, db))
             t.start()
             threads.append(t)
 
@@ -81,34 +83,18 @@ def update_proxies_in_db():
         # Ensure all threads terminate
         for _ in range(NUM_THREADS):
             q.put(None)
-            print("put")
         for t in threads:
             t.join()
-            print("join")
-
-        # Step 3: Update MongoDB with valid proxies
-        for proxy in valid_proxies:
-            collection.update_one(
-                {"proxy": proxy},
-                {"$set": {"proxy": proxy, "valid": True}},
-                upsert=True
-            )
-            print(f"{proxy} added to db")
-
-        # Step 4: Validate existing proxies in the database
-        existing_proxies = collection.find({"valid": True})
-        for record in existing_proxies:
-            if not validate_proxy(record['proxy']):
-                collection.delete_one({"_id": record["_id"]})
-                print(f"Removed invalid proxy: {record['proxy']}")
-
-        # Clear valid proxies list for next round
-        valid_proxies.clear()
 
         # Sleep before the next round of crawling and validation
+        print("-------------------------------------------\n"
+              "-------------------------------------------\n"
+              "-------------------------------------------")
+        print("wait for update")
+        print("-------------------------------------------\n"
+              "-------------------------------------------\n"
+              "-------------------------------------------")
         time.sleep(20)  # Wait before updating again
-
-    client.close()
 
 # Start the proxy updater
 update_proxies_in_db()
