@@ -25,15 +25,17 @@ q = queue.Queue()
 # Number of threads for validation
 NUM_THREADS = 10
 
+
 # Function to validate proxies
 def validate_proxy(proxy):
     try:
         res = requests.get("http://ipinfo.io/json", proxies={"http": proxy, "https": proxy}, timeout=5)
         if res.status_code == 200:
             return True
-    except:
-        return False
+    except requests.RequestException as e:
+        print(f"Error validating proxy {proxy}: {e}")
     return False
+
 
 # Worker function to validate proxies from the queue
 def check_proxies(client, db):
@@ -41,6 +43,7 @@ def check_proxies(client, db):
     while True:
         proxy = q.get()
         if proxy is None:  # Exit signal
+            q.task_done()
             break
         if validate_proxy(proxy):
             print(f"Valid proxy found: {proxy}")
@@ -55,20 +58,29 @@ def check_proxies(client, db):
             print(f"Removed invalid proxy: {proxy}")
         q.task_done()
 
+
 # Function to continuously crawl, validate, and update the MongoDB database
 def update_proxies_in_db():
     client = MongoClient(MONGO_URI)
     db = client[DATABASE_NAME]
 
     while True:
+        print("Starting new iteration...")
+
         # Step 1: Crawl for new proxies
         crawler = Crawler(urls=proxy_websites)
         data = crawler.run()
+        if not data:
+            print("No proxies found in the crawl.")
+            time.sleep(20)
+            continue
 
         # Step 2: Add new proxies to the queue
         for page_data in data:
             for proxy in page_data["proxies"]:
                 q.put(proxy)
+
+        print(f"Added {q.qsize()} proxies to the queue")
 
         # Start threads for validation
         threads = []
@@ -86,7 +98,6 @@ def update_proxies_in_db():
         for t in threads:
             t.join()
 
-        # Sleep before the next round of crawling and validation
         print("-------------------------------------------\n"
               "-------------------------------------------\n"
               "-------------------------------------------")
@@ -94,7 +105,9 @@ def update_proxies_in_db():
         print("-------------------------------------------\n"
               "-------------------------------------------\n"
               "-------------------------------------------")
+        # Sleep before the next round of crawling and validation
         time.sleep(20)  # Wait before updating again
 
-# Start the proxy updater
+    client.close()
+
 update_proxies_in_db()
