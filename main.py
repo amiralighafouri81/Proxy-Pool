@@ -1,6 +1,16 @@
-from Proxy_Pool import Crawler
+import threading
+import queue
+import requests
 from pymongo import MongoClient
+from Proxy_Pool import Crawler
+import time
 
+# MongoDB Configuration
+MONGO_URI = "mongodb://localhost:27017/"
+DATABASE_NAME = "ProxyPool"
+COLLECTION_NAME = "ProxyLists"
+
+# Proxy Websites
 proxy_websites = [
     "https://www.sslproxies.org/",
     "https://free-proxy-list.net/",
@@ -9,33 +19,96 @@ proxy_websites = [
     "https://www.proxynova.com/proxy-server-list/"
 ]
 
-# Initialize and run the crawler
-crawler = Crawler(urls=proxy_websites)
-data = crawler.run()
+# Thread-safe Queue for proxy validation
+q = queue.Queue()
 
-MONGO_URI = "mongodb://localhost:27017/"
-DATABASE_NAME = "ProxyPool"
-COLLECTION_NAME = "ProxyLists"
+# List to store valid proxies
+valid_proxies = []
 
-# Establish a connection to MongoDB
-client = MongoClient(MONGO_URI)
+# Number of threads for validation
+NUM_THREADS = 10
 
-# Access the database
-db = client[DATABASE_NAME]
+# Function to validate proxies
+def validate_proxy(proxy):
+    try:
+        res = requests.get("http://ipinfo.io/json", proxies={"http": proxy, "https": proxy}, timeout=5)
+        if res.status_code == 200:
+            return True
+    except:
+        return False
+    return False
 
-# Access the collection
-collection = db[COLLECTION_NAME]
+# Worker function to validate proxies from the queue
+def check_proxies():
+    global q, valid_proxies
+    while True:
+        proxy = q.get()
+        if proxy is None:  # Exit signal
+            break
+        if validate_proxy(proxy):
+            print(f"Valid proxy found: {proxy}")
+            valid_proxies.append(proxy)
+        q.task_done()
 
-# Prepare data for MongoDB insertion
-if isinstance(data, list):
-    for i, document in enumerate(data):
-        document["_id"] = f"{document['url'].replace('https://', '').replace('/', '_')}_{i+1}"
-    collection.insert_many(data)
-else:
-    data["_id"] = "single_document_1"
-    collection.insert_one(data)
+# Function to continuously crawl, validate, and update the MongoDB database
+def update_proxies_in_db():
+    client = MongoClient(MONGO_URI)
+    db = client[DATABASE_NAME]
+    collection = db[COLLECTION_NAME]
 
-# Print success message
-print(f"Data successfully inserted into {DATABASE_NAME}.{COLLECTION_NAME}")
+    while True:
+        # Step 1: Crawl for new proxies
+        crawler = Crawler(urls=proxy_websites)
+        data = crawler.run()
 
-client.close()
+        # Step 2: Validate crawled proxies
+        new_proxies = []
+        for page_data in data:
+            for proxy in page_data["proxies"]:
+                q.put(proxy)
+                new_proxies.append(proxy)
+
+        # Start threads for validation
+        threads = []
+        for _ in range(NUM_THREADS):
+            t = threading.Thread(target=check_proxies)
+            t.start()
+            threads.append(t)
+
+        # Wait for all proxies to be checked
+        q.join()
+
+        # Ensure all threads terminate
+        for _ in range(NUM_THREADS):
+            q.put(None)
+            print("put")
+        for t in threads:
+            t.join()
+            print("join")
+
+        # Step 3: Update MongoDB with valid proxies
+        for proxy in valid_proxies:
+            collection.update_one(
+                {"proxy": proxy},
+                {"$set": {"proxy": proxy, "valid": True}},
+                upsert=True
+            )
+            print(f"{proxy} added to db")
+
+        # Step 4: Validate existing proxies in the database
+        existing_proxies = collection.find({"valid": True})
+        for record in existing_proxies:
+            if not validate_proxy(record['proxy']):
+                collection.delete_one({"_id": record["_id"]})
+                print(f"Removed invalid proxy: {record['proxy']}")
+
+        # Clear valid proxies list for next round
+        valid_proxies.clear()
+
+        # Sleep before the next round of crawling and validation
+        time.sleep(20)  # Wait before updating again
+
+    client.close()
+
+# Start the proxy updater
+update_proxies_in_db()
